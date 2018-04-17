@@ -10,6 +10,13 @@
 #	ENVIRONMENT VARIABLES
 #
 # ES_VERSION - set externally by the 'es6' or 'es2' aliases
+#
+# current_log_file - part of the es[62] alias
+#
+# ES_PASSWD - utilized in 6.2.3 only 
+#
+# BAD_DATA - tmp file for storing results and error statuses
+#
 ################################################################
 
 ################################################################
@@ -20,11 +27,7 @@
 # environment variables prior to running:
 #
 # alias es6='export ES_VERSION=6.2.3;s;echo $ES_VERSION'
-# alias es2='export ES_VERSION=2.4.3;s;echo $ES_VERSION'
-#
-# export current_log_file
-#
-# export ES_PASSWD
+# alias es2='export ES_VERSION=2.4.6;s;echo $ES_VERSION'
 # 
 ################################################################
 
@@ -33,7 +36,7 @@ function collect_curl_parameters() {
 	validate_url_method $@
 	validate_path_variable $@
 	process_data_field
-	setup_host_auth_headers
+	build_request_components
 	execute_cmd
 }
 
@@ -49,17 +52,32 @@ function process_data_field() {
 	# the variable in double quotes ensures there will be an empty
 	# string as an argument (i.e. [ -n "" ])
 		validate_data_field
-	else
-		echo "No data received"
 	fi
 }
 
 function validate_data_field() {
-	if [ "${path}" = *"_analyze"* ] && [ "${ES_VERSION}" == "2.4.6" ]; then
-		echo "No validation required. data: ${data}"
+	if [[ "${path}" = *"_analyze"* ]]; then
+		process_analyzer_requirements
 	else 
 		validate_json_data
 	fi
+}
+
+function process_analyzer_requirements() {
+	if [ "${ES_VERSION}" == "2.4.6" ]; then
+		data="-d ${data}"
+	else
+		process_6_2_3_analyzer
+		validate_json_data
+	fi
+}
+
+function process_6_2_3_analyzer() {
+	nameElement=$(echo $path | sed -e 's/\(.*\)?\([^=]*\)=\([^\&$]*\)/\2/')
+	valueElement=$(echo $path | sed -e "s/\(.*\)${nameElement}=\([^\&$]*\)/\2/")
+	remaining=$(echo $path | sed -e "s/\(.*\)${nameElement}=\([^\&$]*\)\(.*\)/\1\3/")
+	data="{\"${nameElement}\":\"${valueElement}\", \"text\":\"${data}\"}"
+	path=$(echo $remaining | sed -e 's/\?$//')
 }
 
 # esrun -d '{"hello":"is it me youre looking for"}' GET /gb/_search
@@ -76,8 +94,8 @@ function validate_json_data() {
 
 function validate_url_method() {
 	method=$(echo ${1} | tr '[:lower:]' '[:upper:]')
-	if [ "GET" == "${method}" ] || [ "POST" == "${method}" ] || [ "PUT" == "${method}" ] || [ "HEAD" == "${method}" ]; then
-		echo $method
+	if [ "GET" == "${method}" ] || [ "POST" == "${method}" ] || [ "PUT" == "${method}" ] || [ "HEAD" == "${method}" ] || [ "DELETE" == "${method}" ]; then
+		echo $method > ${BAD_DATA}
 	else
 		elasticsearch_usage 1
 	fi
@@ -91,11 +109,7 @@ function validate_path_variable() {
 	path="$2"
 }
 
-function setup_host_auth_headers() {
-	get_host_and_auth
-}
-
-function get_host_and_auth() {
+function build_request_components() {
 	# 2.4.6 or 6.2.3
 	if [ "$ES_VERSION" == "6.2.3" ]; then
 		port=":9623"
@@ -129,9 +143,10 @@ function execute_cmd() {
 	echo "$ES_VERSION" >> $current_log_file
 	echo >> $current_log_file
 	eval $execution_cmd >> $current_log_file
+	echo >> $current_log_file
+	echo "$execution_cmd" >> $current_log_file
 	echo "$current_log_file" >> $current_log_file
 	echo "$ES_VERSION" >> $current_log_file
-	echo "$execution_cmd" >> $current_log_file
 	cat $current_log_file
 }
 
@@ -139,7 +154,7 @@ function elasticsearch_usage () {
 	filename=$(basename $0)
 	case $1 in
 		"1" )
-			echo "Error: Program must supply correct (case insensitive) method"
+			echo "Error: Program must supply correct (case insensitive) method, not: $method"
 			usage_es 
 			exit 1 ;;
 		"2" )
@@ -157,15 +172,15 @@ function elasticsearch_usage () {
 }
 
 function usage_es() {
-			echo "usage: $filename [-d 'data' | -f filename] method path" 
-			echo "where, "
-			echo "      method: GET|geT|PoST|PoSt|PUT|put|HEAD|head"
-			echo "          case insensitive"
-			echo "      path: valid string"
-			echo "      data: valid JSON (must be within single quotes)"
-			echo "            or text string for analyzer 2.* (must be "
-			echo "            within double quotes)"
-			echo "      filename: file which contains valid json body"
+	echo 
+	echo "usage: $filename [-d 'data' | -f filename] method path" 
+	echo "where, "
+	echo "      method:   GET|geT|PoST|PoSt|PUT|put|HEAD|head|DELETE|deLeTe"
+	echo "                case insensitive"
+	echo "      path:     valid string"
+	echo "      data:     valid JSON (must be within single quotes) or text"
+	echo "                string for analyzer (must be within double quotes)"
+	echo "      filename: file which contains valid json body"
 }
 
 clear
