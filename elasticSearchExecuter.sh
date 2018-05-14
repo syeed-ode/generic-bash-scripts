@@ -2,6 +2,7 @@
 
 # This program executes elasticsearch 6.2.3 and 2.4.6 queries
 # based upon a number of parameters and environtment  variables.
+# 
 
 
 
@@ -177,10 +178,11 @@ function usage_es() {
 	echo "where, "
 	echo "      method:   GET|geT|PoST|PoSt|PUT|put|HEAD|head|DELETE|deLeTe"
 	echo "                case insensitive"
-	echo "      path:     valid string"
+	echo "      path:     valid Elastic search resource string"
 	echo "      data:     valid JSON (must be within single quotes) or text"
-	echo "                string for analyzer (must be within double quotes)"
-	echo "      filename: file which contains valid json body"
+	echo "                string for GET|POST /analyzer (must be within double quotes)"
+	echo "      filename: file which contains json body"
+	echo "Example: $filename \"text\" GET /analyzer"
 }
 
 clear
